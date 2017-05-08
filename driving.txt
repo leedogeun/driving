@@ -1,0 +1,120 @@
+﻿import numpy as np                # numpy
+import matplotlib.pyplot as plt   # matplotlib
+import cv2                        # opencv-python
+import pyscreenshot as ImageGrab  # pyscreenshot
+from PIL import Image             # Pillow
+import pyautogui
+
+
+
+
+##### 이미지 등록 ################################
+def main():
+
+    ##### 캡처 위치 설정 #############################
+    x1, y1 = 0, 0
+    x2, y2 = 1280, 720
+
+    ##### 이미지 캡처 #############################
+    img = ImageGrab.grab(bbox=(x1, y1, x2, y2))
+    img = np.array(img)
+
+    return img
+
+
+
+
+
+##### 이미지 와핑 (탑뷰) ########################
+def imageWarping(img):
+
+    ##### 좌표 설정 ############################
+    preX1, preY1   =  450, 450
+    preX2, preY2   =  100, 550
+    preX3, preY3   =  780, 450
+    preX4, preY4   =  1000, 550
+
+    postX1, postY1 =   100, 0
+    postX2, postY2 =   100, 550
+    postX3, postY3 =  1000, 0
+    postX4, postY4 =  1000, 550
+
+    prePoint = np.float32([
+                            [preX1,preY1]
+                           ,[preX2,preY2]
+                           ,[preX3,preY3]
+                           ,[preX4,preY4]
+                         ])
+
+    postPoint = np.float32([
+                            [postX1,postY1]
+                           ,[postX2,postY2]
+                           ,[postX3,postY3]
+                           ,[postX4,postY4]
+                          ])
+
+    ##### 이미지 와핑 ##########################
+    M   = cv2.getPerspectiveTransform(prePoint, postPoint)
+    dst = cv2.warpPerspective(img, M, (postX4,postY4))
+
+    ##### 썸네일 생성 #########################
+    thumbRate   = 4
+    thumbWidth  = int(postX4/thumbRate)
+    thumbHeight = int(postY4/thumbRate)
+    thumbnail   = cv2.resize(dst, (thumbWidth,thumbHeight))
+
+    ##### 이미지 출력 #########################
+    cv2.imshow("img", thumbnail)
+    return thumbnail
+
+
+
+
+
+##### 허프 변환 (차선 검출) #######################
+def hough(img, thr):
+    imgray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    edges  = cv2.Canny(imgray, 100, 150, apertureSize=3)
+
+    lines = cv2.HoughLines(edges, 1, np.pi/180, thr)
+
+    print(lines)
+
+    try:
+
+        for line in lines:
+            r, theta = line[0]
+
+            a = np.cos(theta)
+            b = np.sin(theta)
+
+            x0, y0 = r * a, r * b
+            x1, y1 = int(x0 + 1000 * (-b)), int(x0 + 1000 * a)
+            x2, y2 = int(x0 - 1000 * (-b)), int(y0 - 1000 * a)
+
+            lineColor = (255, 0, 0)
+            lineWeight = 2
+            cv2.line(img, (x1, y1), (x2, y2), lineColor, lineWeight)
+
+        cv2.imshow("img", img)
+        cv2.waitKey(1)
+
+    except:
+        pass
+
+
+
+
+##### main #####################################
+if __name__ == '__main__':
+
+    while(True):
+
+        img = main() # 이미지 추출
+
+        img = imageWarping(img) # 탑뷰 조작
+
+        hough(img, 40) # 차선 검출
+	
+	# key 조작
+
