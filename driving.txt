@@ -1,9 +1,9 @@
-﻿import numpy as np                # numpy
+import numpy as np                # numpy
 import matplotlib.pyplot as plt   # matplotlib
 import cv2                        # opencv-python
 import pyscreenshot as ImageGrab  # pyscreenshot
 from PIL import Image             # Pillow
-import pyautogui
+import pyautogui		  # pyautogui
 
 
 
