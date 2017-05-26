@@ -1,9 +1,11 @@
-import numpy as np                # numpy
-import matplotlib.pyplot as plt   # matplotlib
-import cv2                        # opencv-python
+import numpy as np  # numpy
+import matplotlib.pyplot as plt  # matplotlib
+import cv2  # opencv-python
 import pyscreenshot as ImageGrab  # pyscreenshot
-from PIL import Image             # Pillow
-import pyautogui		  # pyautogui
+from PIL import Image  # Pillow
+import pyautogui  # pyautogui
+import wx #wxPython
+
 
 
 
@@ -11,13 +13,19 @@ import pyautogui		  # pyautogui
 ##### 이미지 등록 ################################
 def main():
 
-    ##### 캡처 위치 설정 #############################
-    x1, y1 = 0, 0
-    x2, y2 = 1280, 720
+    app = wx.App()
+    screen = wx.ScreenDC()
 
-    ##### 이미지 캡처 #############################
-    img = ImageGrab.grab(bbox=(x1, y1, x2, y2))
-    img = np.array(img)
+    x1, y1 = 0, 0
+    x2, y2 = 1000, 550
+
+    bmp = wx.Bitmap(x2, y2)
+    mem = wx.MemoryDC(bmp)
+    mem.Blit(x1, y1, x2, y2, screen, 0, 0)
+    del mem
+
+    bmp.SaveFile('wx.bmp', wx.BITMAP_TYPE_BMP)
+    img = cv2.imread("wx.bmp")
 
     return img
 
@@ -27,41 +35,40 @@ def main():
 
 ##### 이미지 와핑 (탑뷰) ########################
 def imageWarping(img):
-
     ##### 좌표 설정 ############################
-    preX1, preY1   =  450, 450
-    preX2, preY2   =  100, 550
-    preX3, preY3   =  780, 450
-    preX4, preY4   =  1000, 550
+    preX1, preY1    =  450, 450
+    preX2, preY2    =  100, 550
+    preX3, preY3    =  780, 450
+    preX4, preY4    = 1000, 550
 
-    postX1, postY1 =   100, 0
-    postX2, postY2 =   100, 550
-    postX3, postY3 =  1000, 0
-    postX4, postY4 =  1000, 550
+    postX1, postY1  =  100,   0
+    postX2, postY2  =  100, 550
+    postX3, postY3  = 1000,   0
+    postX4, postY4  = 1000, 550
 
     prePoint = np.float32([
-                            [preX1,preY1]
-                           ,[preX2,preY2]
-                           ,[preX3,preY3]
-                           ,[preX4,preY4]
-                         ])
+          [preX1, preY1]
+        , [preX2, preY2]
+        , [preX3, preY3]
+        , [preX4, preY4]
+    ])
 
     postPoint = np.float32([
-                            [postX1,postY1]
-                           ,[postX2,postY2]
-                           ,[postX3,postY3]
-                           ,[postX4,postY4]
-                          ])
+          [postX1, postY1]
+        , [postX2, postY2]
+        , [postX3, postY3]
+        , [postX4, postY4]
+    ])
 
     ##### 이미지 와핑 ##########################
-    M   = cv2.getPerspectiveTransform(prePoint, postPoint)
-    dst = cv2.warpPerspective(img, M, (postX4,postY4))
+    M = cv2.getPerspectiveTransform(prePoint, postPoint)
+    dst = cv2.warpPerspective(img, M, (postX4, postY4))
 
     ##### 썸네일 생성 #########################
-    thumbRate   = 4
-    thumbWidth  = int(postX4/thumbRate)
-    thumbHeight = int(postY4/thumbRate)
-    thumbnail   = cv2.resize(dst, (thumbWidth,thumbHeight))
+    thumbRate = 4
+    thumbWidth = int(postX4 / thumbRate)
+    thumbHeight = int(postY4 / thumbRate)
+    thumbnail = cv2.resize(dst, (thumbWidth, thumbHeight))
 
     ##### 이미지 출력 #########################
     cv2.imshow("img", thumbnail)
@@ -71,36 +78,167 @@ def imageWarping(img):
 
 
 
-##### 허프 변환 (차선 검출) #######################
-def hough(img, thr):
-    imgray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    edges  = cv2.Canny(imgray, 100, 150, apertureSize=3)
-
-    lines = cv2.HoughLines(edges, 1, np.pi/180, thr)
-
-    print(lines)
+##### 대표선 구하기 ####################################
+def get_fitline(img, f_lines):
 
     try:
+        lines = np.squeeze(f_lines)
+        lines = lines.reshape(lines.shape[0] * 2, 2)
+        rows, cols = img.shape[:2]
 
-        for line in lines:
-            r, theta = line[0]
+        output = cv2.fitLine(lines, cv2.DIST_L2, 0, 0.01, 0.01)
 
-            a = np.cos(theta)
-            b = np.sin(theta)
+        vx, vy, x, y = output[0], output[1], output[2], output[3]
 
-            x0, y0 = r * a, r * b
-            x1, y1 = int(x0 + 1000 * (-b)), int(x0 + 1000 * a)
-            x2, y2 = int(x0 - 1000 * (-b)), int(y0 - 1000 * a)
+        x1, y1 = int(((img.shape[0] - 1) - y) / vy * vx + x), img.shape[0] - 1
+        x2, y2 = int(((img.shape[0] / 2 + 100) - y) / vy * vx + x), int(img.shape[0] / 2) + 100
 
-            lineColor = (255, 0, 0)
-            lineWeight = 2
-            cv2.line(img, (x1, y1), (x2, y2), lineColor, lineWeight)
+        fit_line_arr = [x1, y1, x2, y2]
+        fit_slope_degree = (np.arctan2(fit_line_arr[1] - fit_line_arr[3], fit_line_arr[0] - fit_line_arr[2]) * 180) / np.pi  # 기울기 구하기
+        fit_slope_degree = np.abs(fit_slope_degree)
 
-        cv2.imshow("img", img)
-        cv2.waitKey(1)
+        ##### 차선의 기울어진 방향 구하기 #########################
+        direction = fit_line_arr[0] - fit_line_arr[2]
+
+        if direction >= 0:   # 우측으로 기울어진 차선의 경우
+            x2 = int(np.sqrt(np.power((img.shape[0]/np.sin(fit_slope_degree*(np.pi/180))), 2)-np.power(img.shape[0], 2)) + fit_line_arr[0])
+            y2 = 0
+
+        elif direction < 0:  # 좌측으로 기울어진 차선의 경우
+            x2 = int(fit_line_arr[0] - np.sqrt(np.power(img.shape[0]/np.sin((180-fit_slope_degree)*(np.pi/180)),2)-np.power(img.shape[0], 2)))
+            y2 = 0
+
+        result = [x1, y1, x2, y2]
+
+    except:
+        result = None
+        pass
+
+    return result
+
+
+
+
+
+##### 대표선 그리기 ####################################
+def draw_fit_line(img, f_lines):
+    try:
+
+        x1, y1 = f_lines[0], f_lines[1]
+        x2, y2 = f_lines[2], f_lines[3]
+
+        lineColor = (255, 255, 0)
+        lineWeight = 5
+
+        cv2.line(img, (x1, y1), (x2, y2), lineColor, lineWeight)
 
     except:
         pass
+
+
+
+
+
+##### 허프 변환 (차선 검출) #######################
+def hough(img, thr):
+    imgray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(imgray, 100, 150, apertureSize=3)
+
+    ##### 차선 검출 #################################
+    lines = cv2.HoughLinesP(edges, 1, np.pi / 180, thr, minLineLength=4, maxLineGap=20)  # 허프 변환
+
+    ##### 수평선 필터링 ###################################
+    line_arr = np.squeeze(lines)
+
+    try:
+        slope_degree = (np.arctan2(line_arr[:, 1] - line_arr[:, 3], line_arr[:, 0] - line_arr[:, 2]) * 180) / np.pi  # 기울기 구하기
+
+        line_arr = line_arr[np.abs(slope_degree) < 105]         # 수평 기울기 제한
+        slope_degree = slope_degree[np.abs(slope_degree) < 105] # 수평 기울기 제한
+
+        line_arr = line_arr[np.abs(slope_degree) > 75]          # 수직 기울기 제한
+        slope_degree = slope_degree[np.abs(slope_degree) > 75]   # 수직 기울기 제한
+
+        line_arr = line_arr[line_arr[:, 0] > 30, :]             # 변두리 선 제거
+
+        ##### 좌측선, 우측선 분류 ####################################
+        L_lines = line_arr[line_arr[:, 0] < (img.shape[1]/2)+5, :]
+        R_lines = line_arr[line_arr[:, 0] > (img.shape[1]/2)+5, :]
+
+        temp = np.zeros((img.shape[0], img.shape[1], 3), dtype=np.uint8)                    # 필터링된 직선 버리기
+        L_lines, R_lines = L_lines[:, None], R_lines[:, None]                               # 필터링된 직선 버리기
+
+    except:
+        pass
+
+    ##### 대표선 검출 ######################
+    try:
+        left_fit_line = get_fitline(img, L_lines)   # 좌측 대표선 구하기
+        draw_fit_line(temp, left_fit_line)                  # 좌측 대표선 그리기
+        lineImg = cv2.addWeighted(img, 1, temp, 1.0, 0.0)   # 좌측 대표선 그리기
+
+        #print("left : ", left_fit_line)
+
+        cv2.imshow('img', lineImg)
+
+    except:
+        pass
+
+    try:
+        right_fit_line = get_fitline(img, R_lines) # 우측 대표선 구하기
+        draw_fit_line(temp, right_fit_line)                 # 우측 대표선 그리기
+        lineImg = cv2.addWeighted(img, 1, temp, 1.0, 0.0)   # 우측 대표선 그리기
+
+        #print("right : ", right_fit_line)
+
+        cv2.imshow('img', lineImg)
+
+    except:
+        pass
+
+    cv2.waitKey(1)
+
+    ##### 센터 검출 ######################
+    try:
+        if right_fit_line == None:
+            center = left_fit_line[0] + 55
+
+        elif left_fit_line == None:
+            center = right_fit_line[0] - 55
+
+        else:
+            center = int((left_fit_line[0] + right_fit_line[0])/2)
+
+    except:
+        center = 135
+        pass
+
+    return center
+
+
+
+
+
+##### 키 입력 (자동차 제어) #######################
+def keyInput(center):
+
+    try:
+        screenCenter = 135
+
+        if screenCenter-center < -12:
+            pyautogui.keyDown("right")
+            pyautogui.keyUp("right")
+
+        elif screenCenter-center > 12:
+            pyautogui.keyDown("left")
+            pyautogui.keyUp("left")
+
+    except:
+        pass
+
+    print(center, "/", screenCenter - center)
+    pass
+
 
 
 
@@ -110,11 +248,13 @@ if __name__ == '__main__':
 
     while(True):
 
-        img = main() # 이미지 추출
+        img = main()             # 이미지 추출
 
-        img = imageWarping(img) # 탑뷰 조작
+        img = imageWarping(img)  # 탑뷰 조작
 
-        hough(img, 40) # 차선 검출
-	
-	# key 조작
+        center = hough(img, 20)  # 차선 검출하여 센터 설정
+
+        keyInput(center)         # key 조작
+
+
 
