@@ -1,11 +1,11 @@
 import socket
 import threading
 import json
-import keyInput
+import Dao
 
 
 ##### 클라이언트 IP, PORT 설정 ##########################
-HOST = "192.168.35.91"
+HOST = "192.168.35.90"
 PORT = 10000
 
 
@@ -32,7 +32,24 @@ def getData():
 
                 print(data)
 
-                keyInput.keyInput(data['centerStatus'])
+                screenCenter = str(data['screenCenter'])
+                center       = str(data['center'])
+                centerStatus = str(data['centerStatus'])
+                keyValue     = str(data['keyValue'])
+
+                carLogInfo = open("/home/pilot-pjt/working/cat-batch-log/carLogInfo.txt", "a")
+                carLogInfo.write( screenCenter + ","
+                                + center       + ","
+                                + centerStatus + ","
+                                + keyValue     + "\n"
+                )
+                carLogInfo.close()
+
+                Dao.insertDao( screenCenter
+                             , center
+                             , centerStatus
+                             , keyValue
+                )
 
             except:
                 pass
