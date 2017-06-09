@@ -1,0 +1,30 @@
+import numpy as np
+import cv2
+import imutils
+
+# 이미지 불러오기+픽셀조정+흐릿하게 처리
+img = cv2.imread("../blueimg/2.jpg")
+img = imutils.resize(img, width=600)
+image = cv2.GaussianBlur(img, (5, 5), 0)
+image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+# 파란색 범위 지정
+lower = np.array([115, 50, 114])
+upper = np.array([130, 255, 255])
+mask = cv2.inRange(image, lower, upper)
+# 마스크 출현
+cv2.imshow('mask', mask)
+
+# 윤곽들 찾아내기
+(_, cnts, _) = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+c = max(cnts, key=cv2.contourArea)
+
+# 가장 가장자리의 윤곽점 나타내기
+peri = cv2.arcLength(c, True)
+approx = cv2.approxPolyDP(c, 0.05 * peri, True)
+print("approx", approx)
+
+# 이제 화면에 나타내기
+cv2.drawContours(img, [approx], -1, (0, 0, 255), 2)
+cv2.imshow("Image", img)
+cv2.waitKey(0)
